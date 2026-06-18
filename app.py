@@ -2,145 +2,74 @@ import streamlit as st
 import cv2
 import numpy as np
 
-st.set_page_config(page_title="Contador de Tetrastichus")
+st.title("🐞 Contador de Pontos Pretos (ajustado para 1mm)")
 
-st.title("🦟 Contador de Tetrastichus")
-
-area_min = st.slider("Área mínima", 1, 100, 10)
-area_max = st.slider("Área máxima", 10, 500, 100)
-
-arquivo = st.file_uploader(
-    "Envie uma foto da placa",
-    type=["jpg", "jpeg", "png"]
-)
+arquivo = st.file_uploader("Envie a imagem da placa", type=["jpg","jpeg","png"])
 
 if arquivo is not None:
 
-    file_bytes = np.frombuffer(
-        arquivo.read(),
-        np.uint8
-    )
-
-    img = cv2.imdecode(
-        file_bytes,
-        cv2.IMREAD_COLOR
-    )
+    file_bytes = np.frombuffer(arquivo.read(), np.uint8)
+    img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
     st.write("Resolução:", img.shape)
 
-    h, w = img.shape[:2]
+    # =========================
+    # PRÉ-PROCESSAMENTO
+    # =========================
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    metade_h = h // 2
-    metade_w = w // 2
+    gray = cv2.GaussianBlur(gray, (3, 3), 0)
 
-    quadrantes = [
-        ("Q1", img[0:metade_h, 0:metade_w]),
-        ("Q2", img[0:metade_h, metade_w:w]),
-        ("Q3", img[metade_h:h, 0:metade_w]),
-        ("Q4", img[metade_h:h, metade_w:w]),
-    ]
+    # normaliza contraste (ESSENCIAL)
+    gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
 
-    total_geral = 0
+    # =========================
+    # DETECÇÃO DE PIXEIS ESCUROS
+    # =========================
+    # pega tudo que é mais escuro que o fundo
+    _, mask = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY_INV)
 
-    resultado_final = img.copy()
+    # limpa ruído leve
+    kernel = np.ones((2,2), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
 
-    st.subheader("Contagem por quadrante")
+    # junta pixels próximos (IMPORTANTÍSSIMO)
+    mask = cv2.dilate(mask, kernel, iterations=1)
 
-    for nome, quad in quadrantes:
+    # =========================
+    # CONTAGEM POR COMPONENTES
+    # =========================
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask)
 
-        gray = cv2.cvtColor(
-            quad,
-            cv2.COLOR_BGR2GRAY
-        )
+    total = 0
+    img_result = img.copy()
 
-        gray = cv2.equalizeHist(gray)
+    for i in range(1, num_labels):
 
-        blur = cv2.GaussianBlur(
-            gray,
-            (3, 3),
-            0
-        )
+        area = stats[i, cv2.CC_STAT_AREA]
 
-        _, mask = cv2.threshold(
-            blur,
-            0,
-            255,
-            cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
-        )
+        # filtros para remover sujeira e borda
+        if 3 < area < 80:
 
-        kernel = np.ones((2, 2), np.uint8)
+            total += 1
 
-        mask = cv2.morphologyEx(
-            mask,
-            cv2.MORPH_OPEN,
-            kernel,
-            iterations=1
-        )
+            x = stats[i, cv2.CC_STAT_LEFT]
+            y = stats[i, cv2.CC_STAT_TOP]
+            w = stats[i, cv2.CC_STAT_WIDTH]
+            h = stats[i, cv2.CC_STAT_HEIGHT]
 
-        contours, _ = cv2.findContours(
-            mask,
-            cv2.RETR_EXTERNAL,
-            cv2.CHAIN_APPROX_SIMPLE
-        )
+            cv2.rectangle(
+                img_result,
+                (x, y),
+                (x+w, y+h),
+                (0, 0, 255),
+                1
+            )
 
-        contagem_quad = 0
+    st.success(f"Total estimado: {total}")
 
-        for c in contours:
+    st.subheader("Máscara")
+    st.image(mask, clamp=True)
 
-            area = cv2.contourArea(c)
-
-            if area_min <= area <= area_max:
-
-                x, y, ww, hh = cv2.boundingRect(c)
-
-                contagem_quad += 1
-
-                if nome == "Q1":
-                    offset_x = 0
-                    offset_y = 0
-
-                elif nome == "Q2":
-                    offset_x = metade_w
-                    offset_y = 0
-
-                elif nome == "Q3":
-                    offset_x = 0
-                    offset_y = metade_h
-
-                else:
-                    offset_x = metade_w
-                    offset_y = metade_h
-
-                cv2.rectangle(
-                    resultado_final,
-                    (x + offset_x, y + offset_y),
-                    (x + ww + offset_x, y + hh + offset_y),
-                    (0, 0, 255),
-                    2
-                )
-
-        total_geral += contagem_quad
-
-        st.write(f"{nome}: {contagem_quad} insetos")
-
-    st.success(f"Total estimado: {total_geral}")
-
-    st.subheader("Foto Original")
-
-    st.image(
-        cv2.cvtColor(
-            img,
-            cv2.COLOR_BGR2RGB
-        ),
-        use_container_width=True
-    )
-
-    st.subheader("Detecção")
-
-    st.image(
-        cv2.cvtColor(
-            resultado_final,
-            cv2.COLOR_BGR2RGB
-        ),
-        use_container_width=True
-    )
+    st.subheader("Resultado")
+    st.image(cv2.cvtColor(img_result, cv2.COLOR_BGR2RGB))
