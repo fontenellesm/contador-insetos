@@ -106,4 +106,4 @@ if arquivo is not None:
     st.image(
         cv2.cvtColor(resultado, cv2.COLOR_BGR2RGB),
         use_container_width=True
-    )COLOR_BGR2RGB))
+    )
