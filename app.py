@@ -2,7 +2,7 @@ import streamlit as st
 import cv2
 import numpy as np
 
-st.title("🐞 Contador de Pontos Pretos (ajustado para 1mm)")
+st.title("🐞 Contador de Pontos Pretos (versão robusta)")
 
 arquivo = st.file_uploader("Envie a imagem da placa", type=["jpg","jpeg","png"])
 
@@ -11,29 +11,29 @@ if arquivo is not None:
     file_bytes = np.frombuffer(arquivo.read(), np.uint8)
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-    st.write("Resolução:", img.shape)
-
-    # =========================
-    # PRÉ-PROCESSAMENTO
-    # =========================
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    gray = cv2.GaussianBlur(gray, (3, 3), 0)
+    # 🔥 melhora contraste local (MUITO importante)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    gray = clahe.apply(gray)
 
-    # normaliza contraste (ESSENCIAL)
-    gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
+    # leve blur
+    gray = cv2.GaussianBlur(gray, (3,3), 0)
 
-    # =========================
-    # DETECÇÃO DE PIXEIS ESCUROS
-    # =========================
-    # pega tudo que é mais escuro que o fundo
-    _, mask = cv2.threshold(gray, 120, 255, cv2.THRESH_BINARY_INV)
+    # 🔥 threshold adaptativo (melhor que OTSU aqui)
+    mask = cv2.adaptiveThreshold(
+        gray,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV,
+        11,
+        2
+    )
 
-    # limpa ruído leve
+    # limpeza
     kernel = np.ones((2,2), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
 
-    # junta pixels próximos (IMPORTANTÍSSIMO)
     mask = cv2.dilate(mask, kernel, iterations=1)
 
     # =========================
@@ -48,8 +48,8 @@ if arquivo is not None:
 
         area = stats[i, cv2.CC_STAT_AREA]
 
-        # filtros para remover sujeira e borda
-        if 3 < area < 80:
+        # 🔥 ajuste crítico para 1mm
+        if 2 <= area <= 60:
 
             total += 1
 
@@ -66,9 +66,9 @@ if arquivo is not None:
                 1
             )
 
-    st.success(f"Total estimado: {total}")
+    st.success(f"Total de pontos pretos: {total}")
 
-    st.subheader("Máscara")
+    st.subheader("Máscara gerada")
     st.image(mask, clamp=True)
 
     st.subheader("Resultado")
