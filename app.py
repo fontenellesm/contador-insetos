@@ -2,7 +2,7 @@ import streamlit as st
 import cv2
 import numpy as np
 
-st.title("🐞 Contador de Insetos (ajustado para sua placa)")
+st.title("🦟 Contador de Insetos-Viabilidade ") 
 
 area_min = st.slider("Área mínima", 1, 50, 3)
 area_max = st.slider("Área máxima", 10, 500, 200)
