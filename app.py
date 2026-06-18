@@ -2,70 +2,108 @@ import streamlit as st
 import cv2
 import numpy as np
 
-st.title("🐞 Contador de Insetos (ajustado para sua placa)")
+st.title("🐞 Contador de Insetos")
 
-area_min = st.slider("Área mínima", 1, 50, 3)
-area_max = st.slider("Área máxima", 10, 500, 200)
+area_min = st.slider("Área mínima", 1, 100, 5)
+area_max = st.slider("Área máxima", 10, 1000, 300)
 
-foto = st.camera_input("Tire uma foto da placa")
+arquivo = st.file_uploader(
+    "Envie uma foto da placa (30x30 cm)",
+    type=["jpg", "jpeg", "png"]
+)
 
-if foto is not None:
+if arquivo is not None:
 
-    file_bytes = np.frombuffer(foto.getvalue(), np.uint8)
-    img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    file_bytes = np.frombuffer(
+        arquivo.read(),
+        np.uint8
+    )
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img = cv2.imdecode(
+        file_bytes,
+        cv2.IMREAD_COLOR
+    )
 
-    # 🔥 melhora contraste (IMPORTANTE aqui)
-    gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
+    # Converter para cinza
+    gray = cv2.cvtColor(
+        img,
+        cv2.COLOR_BGR2GRAY
+    )
 
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    # Melhorar contraste
+    gray = cv2.equalizeHist(gray)
 
-    # 🔥 usa Canny (MELHOR PARA SEU CASO)
-    edges = cv2.Canny(blur, 30, 90)
+    # Suavização
+    blur = cv2.GaussianBlur(
+        gray,
+        (5, 5),
+        0
+    )
 
-    # fecha pequenos buracos
+    # Detectar regiões escuras
+    _, mask = cv2.threshold(
+        blur,
+        80,
+        255,
+        cv2.THRESH_BINARY_INV
+    )
+
+    # Limpeza de ruído
     kernel = np.ones((3, 3), np.uint8)
-    edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=1)
 
+    mask = cv2.morphologyEx(
+        mask,
+        cv2.MORPH_OPEN,
+        kernel,
+        iterations=1
+    )
+
+    # Contornos
     contours, _ = cv2.findContours(
-        edges,
+        mask,
         cv2.RETR_EXTERNAL,
         cv2.CHAIN_APPROX_SIMPLE
     )
 
     total = 0
-    img_result = img.copy()
+
+    resultado = img.copy()
 
     for c in contours:
 
         area = cv2.contourArea(c)
 
-        if area_min < area < area_max:
+        if area_min <= area <= area_max:
 
             x, y, w, h = cv2.boundingRect(c)
 
-            aspect = w / float(h) if h > 0 else 0
+            total += 1
 
-            if 0.2 < aspect < 5:
+            cv2.rectangle(
+                resultado,
+                (x, y),
+                (x + w, y + h),
+                (0, 0, 255),
+                2
+            )
 
-                total += 1
+    st.success(f"Total encontrado: {total}")
 
-                cv2.rectangle(
-                    img_result,
-                    (x, y),
-                    (x + w, y + h),
-                    (0, 0, 255),
-                    1
-                )
+    st.subheader("Foto Original")
+    st.image(
+        cv2.cvtColor(img, cv2.COLOR_BGR2RGB),
+        use_container_width=True
+    )
 
-    st.success(f"Total estimado: {total}")
+    st.subheader("Máscara")
+    st.image(
+        mask,
+        clamp=True,
+        use_container_width=True
+    )
 
-    st.subheader("Original")
-    st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-
-    st.subheader("Edges (detecção)")
-    st.image(edges, clamp=True)
-
-    st.subheader("Resultado")
-    st.image(cv2.cvtColor(img_result, cv2.COLOR_BGR2RGB))
+    st.subheader("Insetos Detectados")
+    st.image(
+        cv2.cvtColor(resultado, cv2.COLOR_BGR2RGB),
+        use_container_width=True
+    )COLOR_BGR2RGB))
