@@ -2,74 +2,70 @@ import streamlit as st
 import cv2
 import numpy as np
 
-st.title("🐞 Contador de Pontos Pretos (versão robusta)")
+st.title("🐞 Contador de Insetos (ajustado para sua placa)")
 
-arquivo = st.file_uploader("Envie a imagem da placa", type=["jpg","jpeg","png"])
+area_min = st.slider("Área mínima", 1, 50, 3)
+area_max = st.slider("Área máxima", 10, 500, 200)
 
-if arquivo is not None:
+foto = st.camera_input("Tire uma foto da placa")
 
-    file_bytes = np.frombuffer(arquivo.read(), np.uint8)
+if foto is not None:
+
+    file_bytes = np.frombuffer(foto.getvalue(), np.uint8)
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # 🔥 melhora contraste local (MUITO importante)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    gray = clahe.apply(gray)
+    # 🔥 melhora contraste (IMPORTANTE aqui)
+    gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
 
-    # leve blur
-    gray = cv2.GaussianBlur(gray, (3,3), 0)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # 🔥 threshold adaptativo (melhor que OTSU aqui)
-    mask = cv2.adaptiveThreshold(
-        gray,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY_INV,
-        11,
-        2
+    # 🔥 usa Canny (MELHOR PARA SEU CASO)
+    edges = cv2.Canny(blur, 30, 90)
+
+    # fecha pequenos buracos
+    kernel = np.ones((3, 3), np.uint8)
+    edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+    contours, _ = cv2.findContours(
+        edges,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE
     )
-
-    # limpeza
-    kernel = np.ones((2,2), np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
-
-    mask = cv2.dilate(mask, kernel, iterations=1)
-
-    # =========================
-    # CONTAGEM POR COMPONENTES
-    # =========================
-    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask)
 
     total = 0
     img_result = img.copy()
 
-    for i in range(1, num_labels):
+    for c in contours:
 
-        area = stats[i, cv2.CC_STAT_AREA]
+        area = cv2.contourArea(c)
 
-        # 🔥 ajuste crítico para 1mm
-        if 2 <= area <= 60:
+        if area_min < area < area_max:
 
-            total += 1
+            x, y, w, h = cv2.boundingRect(c)
 
-            x = stats[i, cv2.CC_STAT_LEFT]
-            y = stats[i, cv2.CC_STAT_TOP]
-            w = stats[i, cv2.CC_STAT_WIDTH]
-            h = stats[i, cv2.CC_STAT_HEIGHT]
+            aspect = w / float(h) if h > 0 else 0
 
-            cv2.rectangle(
-                img_result,
-                (x, y),
-                (x+w, y+h),
-                (0, 0, 255),
-                1
-            )
+            if 0.2 < aspect < 5:
 
-    st.success(f"Total de pontos pretos: {total}")
+                total += 1
 
-    st.subheader("Máscara gerada")
-    st.image(mask, clamp=True)
+                cv2.rectangle(
+                    img_result,
+                    (x, y),
+                    (x + w, y + h),
+                    (0, 0, 255),
+                    1
+                )
+
+    st.success(f"Total estimado: {total}")
+
+    st.subheader("Original")
+    st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+
+    st.subheader("Edges (detecção)")
+    st.image(edges, clamp=True)
 
     st.subheader("Resultado")
     st.image(cv2.cvtColor(img_result, cv2.COLOR_BGR2RGB))
