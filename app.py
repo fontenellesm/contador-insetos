@@ -13,20 +13,19 @@ st.set_page_config(page_title="Insetos", layout="wide")
 st.markdown("""
 <style>
 
-body {
-    background-color: #0e1117;
-    color: white;
+[data-testid="stMetric"] {
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
 }
 
-h1 {
-    color: #00ff88;
-    text-align: center;
+[data-testid="stMetricValue"] {
+    color: #00ff88 !important;
+    font-size: 28px !important;
 }
 
-.stMetric {
-    background-color: #1c1f26;
-    padding: 12px;
-    border-radius: 10px;
+[data-testid="stMetricLabel"] {
+    color: white !important;
 }
 
 </style>
