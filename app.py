@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 
 # =========================
-# CONFIGURAÇÃO DA PÁGINA
+# CONFIGURAÇÃO
 # =========================
 st.set_page_config(
     page_title="Contador de Viabilidade",
@@ -12,7 +12,7 @@ st.set_page_config(
 )
 
 # =========================
-# CSS PROFISSIONAL
+# ESTILO
 # =========================
 st.markdown("""
 <style>
@@ -25,12 +25,8 @@ h1 {
 
 .stMetric {
     background-color: #1c1f26;
-    padding: 15px;
-    border-radius: 12px;
-}
-
-.block-container {
-    padding-top: 2rem;
+    padding: 12px;
+    border-radius: 10px;
 }
 
 </style>
@@ -42,15 +38,15 @@ h1 {
 st.title("🦟 Contador de Viabilidade")
 
 # =========================
-# SIDEBAR (CONTROLES)
+# SIDEBAR
 # =========================
 with st.sidebar:
-    st.header("⚙️ Configurações")
+    st.header("⚙️ Ajustes")
 
-    area_min = st.slider("Área mínima", 1, 50, 3)
-    area_max = st.slider("Área máxima", 10, 500, 200)
+    area_min = st.slider("Área mínima", 1, 50, 5)
+    area_max = st.slider("Área máxima", 5, 300, 80)
 
-    st.info("Ajuste os filtros para melhorar a precisão da contagem.")
+    st.info("Mantenha distância e luz constantes.")
 
 # =========================
 # CÂMERA
@@ -58,54 +54,69 @@ with st.sidebar:
 foto = st.camera_input("📷 Tire uma foto da placa")
 
 # =========================
-# FUNÇÃO DE PROCESSAMENTO
+# FUNÇÃO DE DETECÇÃO
 # =========================
 def detectar(img, area_min, area_max):
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
+    # melhora contraste local
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8,8))
+    gray = clahe.apply(gray)
 
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    # suaviza sem destruir pontos
+    blur = cv2.GaussianBlur(gray, (3,3), 0)
 
-    edges = cv2.Canny(blur, 30, 90)
-
-    kernel = np.ones((3, 3), np.uint8)
-
-    edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=1)
-
-    contours, _ = cv2.findContours(
-        edges,
-        cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_SIMPLE
+    # pega pontos escuros reais
+    mask = cv2.adaptiveThreshold(
+        blur,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV,
+        15,
+        3
     )
 
+    # limpa ruído
+    kernel = np.ones((2,2), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=2)
+
+    # conecta pequenos pontos do inseto
+    mask = cv2.dilate(mask, kernel, iterations=1)
+
+    # componentes conectados
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
+
+    resultado = img.copy()
     total = 0
-    img_result = img.copy()
 
-    for c in contours:
+    for i in range(1, num_labels):
 
-        area = cv2.contourArea(c)
+        area = stats[i, cv2.CC_STAT_AREA]
 
-        if area_min < area < area_max:
+        x = stats[i, cv2.CC_STAT_LEFT]
+        y = stats[i, cv2.CC_STAT_TOP]
+        w = stats[i, cv2.CC_STAT_WIDTH]
+        h = stats[i, cv2.CC_STAT_HEIGHT]
 
-            x, y, w, h = cv2.boundingRect(c)
+        aspect = w / (h + 1e-5)
 
-            aspect = w / float(h) if h > 0 else 0
+        if area_min <= area <= area_max:
 
-            if 0.2 < aspect < 5:
+            # filtro de formato (remove sujeira alongada)
+            if 0.4 < aspect < 2.5:
 
                 total += 1
 
                 cv2.rectangle(
-                    img_result,
+                    resultado,
                     (x, y),
                     (x + w, y + h),
                     (0, 255, 0),
                     2
                 )
 
-    return total, img_result, edges
+    return total, resultado, mask
 
 # =========================
 # EXECUÇÃO
@@ -115,7 +126,7 @@ if foto is not None:
     file_bytes = np.frombuffer(foto.getvalue(), np.uint8)
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-    total, resultado, edges = detectar(img, area_min, area_max)
+    total, resultado, mask = detectar(img, area_min, area_max)
 
     # =========================
     # MÉTRICAS
@@ -146,5 +157,5 @@ if foto is not None:
         st.subheader("🔎 Detecção")
         st.image(cv2.cvtColor(resultado, cv2.COLOR_BGR2RGB), use_container_width=True)
 
-    st.subheader("🧪 Edges (o que foi detectado)")
-    st.image(edges, clamp=True, use_container_width=True)
+    st.subheader("🧪 Máscara (o que foi detectado)")
+    st.image(mask, clamp=True, use_container_width=True)
