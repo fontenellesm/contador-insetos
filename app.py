@@ -34,7 +34,7 @@ st.markdown("""
 # =========================
 # TÍTULO
 # =========================
-st.title("🐞 Contador de Insetos - Viabilidade")
+st.title("🦟 Contador de Insetos - Viabilidade")
 
 # =========================
 # CONTROLES
@@ -47,7 +47,7 @@ with col1:
 with col2:
     area_max = st.slider("Área máxima", 10, 500, 200)
 
-foto = st.camera_input("📷 Tire uma foto da placa")
+foto = st.camera_input("📷 Tire uma foto por quadrante")
 
 # =========================
 # FUNÇÃO EXCEL
@@ -119,13 +119,13 @@ if foto is not None:
     c1, c2, c3 = st.columns(3)
 
     with c1:
-        st.metric("🐞 Insetos detectados", total)
+        st.metric("🦟 Insetos detectados", total)
 
-    with c2:
-        st.metric("📏 Área mínima", area_min)
+   # with c2:
+        #st.metric("📏 Área mínima", area_min)
 
-    with c3:
-        st.metric("📏 Área máxima", area_max)
+   # with c3:
+       # st.metric("📏 Área máxima", area_max)
 
     st.markdown("---")
 
@@ -173,7 +173,7 @@ if foto is not None:
         st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
 
     with col2:
-        st.subheader("🔎 Edges")
+        st.subheader("🔎 Detecção")
         st.image(edges, clamp=True)
 
     with col3:
